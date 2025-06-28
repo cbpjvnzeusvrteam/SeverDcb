@@ -71,7 +71,7 @@ def auto_group_greeting():
         time.sleep(1800)  # 30 phút = 1800 giây
         for group_id in GROUPS:
             try:
-                bot.send_message(group_id, "👋 Xin chào các bạn! ZProject đây nè :v \n Bot Zpoject Hoạt Động 24/7 🌍")
+                bot.send_message(group_id, "👋 Xin chào các bạn! ZProject đây nè :v , Có Ý Kiến Hay Gì Để Admin Cập Nhật Cho Bot Hong Chứ Bot Chưa Có Lệnh Gi Het a:( , ghi lệnh /donggop và ý kiến đóng góp lệnh của bạn nhé :>>\n Bot Zpoject Hoạt Động 24/7 🌍")
             except:
                 pass
 
