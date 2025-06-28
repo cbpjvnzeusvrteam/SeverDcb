@@ -1,122 +1,290 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-import requests, random
-from datetime import datetime
+from flask import Flask
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
+import requests, os, json, asyncio, io
+from datetime import datetime, timedelta
+import threading, random
 
-# Token Telegram Bot
 TOKEN = "7053031372:AAGGOnE72JbZat9IaXFqa-WRdv240vSYjms"
-API = "https://10minutemail.net/address.api.php"
-START_TIME = datetime(2025, 6, 28, 0, 0, 0)
+API_KEY = "xai-q0jvC2nF7oYL0gwGTRSUg8Np95zXnEwJlc0gFjSOtVh9eEygErOFChWCYao6X4mKvdF6R4UKNa8SSt7u"
 
-# Danh sách ảnh gái xinh random
-images = [
-    "https://anhnail.com/wp-content/uploads/2024/11/Hinh-anh-gai-xinh-2k8-de-thuong.jpg",
-    "https://anhnail.com/wp-content/uploads/2024/11/Hinh-gai-xinh-2009-toc-dai-cute.jpg",
-    "https://anhnail.com/wp-content/uploads/2024/11/Anh-gai-xinh-2k9-toc-dai-dang-yeu.jpg",
-    "https://tft.edu.vn/public/upload/2024/09/anh-gai-pho-43.webp",
-    "https://hoseiki.vn/wp-content/uploads/2025/03/anh-girl-pho-20.jpg",
-    "https://if24h.com/wp-content/uploads/2024/11/hinh-anh-con-gai-cute-che-mat.jpg",
-    "https://imgt.taimienphi.vn/cf/Images/np/2022/8/16/anh-gai-xinh-cute-de-thuong-hot-girl-5.jpg",
-    "https://cbam.edu.vn/wp-content/uploads/2024/10/anh-girl-pho-25.jpg",
-    "https://i.pinimg.com/474x/4b/08/3b/4b083b831f37d3935756efc29f96fb21.jpg"
-]
+USER_DATA_DIR = "user_data"
+USERS_FILE = "users.json"
 
-# Nút liên hệ admin
-admin_keyboard = InlineKeyboardMarkup([
-    [InlineKeyboardButton("👤 Liên hệ Admin", url="https://t.me/zproject2")]
-])
+if not os.path.exists(USER_DATA_DIR):
+    os.makedirs(USER_DATA_DIR)
 
-# Hàm chèn ảnh random vào HTML
-def get_random_image_html():
-    link = random.choice(images)
-    return f'<a href="{link}">:v</a>'
+PORT = int(os.environ.get("PORT", 8080))
+app = Flask(__name__)
 
-# Hàm tính thời gian hoạt động
-def get_uptime_text():
-    now = datetime.now()
-    uptime = now - START_TIME
-    hours, remainder = divmod(uptime.total_seconds(), 3600)
-    minutes, seconds = divmod(remainder, 60)
-    hour_now = now.hour
-    period = "sáng" if hour_now < 12 else "chiều"
-    hour_12 = hour_now if hour_now <= 12 else hour_now - 12
-    return (
-        f"🕒 <b>Bắt đầu từ:</b> {START_TIME.strftime('%d/%m/%Y')}\n"
-        f"⏰ <b>Giờ hiện tại:</b> {hour_12} giờ {period}\n"
-        f"⏳ <b>Đã hoạt động:</b> {int(hours)} giờ | {int(minutes)} phút | {int(seconds)} giây\n\n"
-        f"{get_random_image_html()}"
-    )
+@app.route('/')
+def index():
+    return "<h2>🤖 Zproject X Duong Cong Bang đang hoạt động!</h2>"
 
-# Các lệnh
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user.mention_html()
-    msg = (
-        f"👋 Xin chào {user}!\nBot tạo mail 10p:\n"
-        f"/new – Tạo mail mới\n/get – Xem mail\n/check – Kiểm tra thư\n"
-        f"/read – Đọc thư mới nhất\n/time – Xem thời gian hoạt động\n\n"
-        f"{get_random_image_html()}"
-    )
-    await update.message.reply_html(msg, reply_to_message_id=update.message.message_id, reply_markup=admin_keyboard)
+def get_user_file(uid):
+    return os.path.join(USER_DATA_DIR, f"zprojectxdcb_{uid}.json")
+    
+def load_user_data(uid):
+    file = get_user_file(uid)
+    if os.path.exists(file):
+        with open(file, 'r') as f:
+            return json.load(f)
+    return {"history": [], "created": datetime.now().isoformat()}
 
-async def time(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_html(get_uptime_text(), reply_to_message_id=update.message.message_id, reply_markup=admin_keyboard)
+def save_user_data(uid, data):
+    with open(get_user_file(uid), 'w') as f:
+        json.dump(data, f)
 
-async def new(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    res = requests.get(f"{API}?new=1").json()
-    mail = res['mail_get_mail']
-    key = res['mail_get_key']
-    left = res['mail_left_time']
-    user = update.effective_user.mention_html()
-    await update.message.reply_html(
-        f"📬 <b>Email mới cho {user}</b>\n✉️ <code>{mail}</code>\n🔑 Key: <code>{key}</code>\n⏳ Còn lại: <b>{left}s</b>\n\n{get_random_image_html()}",
-        reply_to_message_id=update.message.message_id,
-        reply_markup=admin_keyboard
-    )
+def load_all_users():
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, 'r') as f:
+            return json.load(f)
+    return []
 
-async def get(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    res = requests.get(API).json()
-    mail = res['mail_get_mail']
-    key = res['permalink']['key']
-    url = res['permalink']['url']
-    await update.message.reply_html(
-        f"📨 <b>Email hiện tại:</b>\n✉️ <code>{mail}</code>\n🔗 <a href='{url}'>Xem mail</a>\n🔑 Key: <code>{key}</code>\n\n{get_random_image_html()}",
-        reply_to_message_id=update.message.message_id,
-        reply_markup=admin_keyboard
-    )
+def save_all_users(users):
+    with open(USERS_FILE, 'w') as f:
+        json.dump(users, f)
 
-async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    res = requests.get(API).json()
-    mails = res.get("mail_list", [])
-    if not mails:
-        await update.message.reply_text("📭 Hộp thư trống.", reply_to_message_id=update.message.message_id, reply_markup=admin_keyboard)
+async def auto_reset():
+    while True:
+        for file in os.listdir(USER_DATA_DIR):
+            path = os.path.join(USER_DATA_DIR, file)
+            with open(path, 'r') as f:
+                data = json.load(f)
+            created = datetime.fromisoformat(data.get("created", datetime.now().isoformat()))
+            if datetime.now() - created > timedelta(hours=24):
+                uid = file.replace(".json", "")
+                os.remove(path)
+                try:
+                    await app_bot.bot.send_message(chat_id=int(uid), text="⚠️ Dữ liệu của bạn đã được reset sau 24h")
+                except:
+                    pass
+        await asyncio.sleep(3600)
+
+async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = str(update.effective_user.id)
+    cid = update.effective_chat.id
+    name = update.effective_user.full_name
+    username = update.effective_user.username or "bạn"
+    question = ' '.join(context.args)
+
+    all_users = load_all_users()
+    if cid not in all_users:
+        all_users.append(cid)
+        save_all_users(all_users)
+
+    if not question:
+        return await update.message.reply_text("❗ Hãy nhập câu hỏi sau /ask")
+
+    try:
+        with open("prompt.txt", "r", encoding="utf-8") as f:
+            system_prompt = f.read().strip()
+    except:
+        system_prompt = f"Bạn là trợ lý AI Zproject X Duong Cong Bang."
+
+    msg = await update.message.reply_text("⏳", reply_to_message_id=update.message.message_id)
+
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "grok-3-latest",
+        "stream": False,
+        "temperature": 0.7,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": question}
+        ]
+    }
+
+    try:
+        res = requests.post("https://api.x.ai/v1/chat/completions", headers=headers, json=payload, timeout=10)
+        reply = res.json()['choices'][0]['message']['content']
+    except:
+        return await msg.edit_text("❌ Lỗi khi gọi API Zproject")
+
+    # Format code nếu có
+    def format_reply(text):
+        if "```" in text:
+            parts = text.split("```")
+            new_parts = []
+            for i, part in enumerate(parts):
+                new_parts.append(f"<pre>{part.strip()}</pre>" if i % 2 == 1 else part)
+            return ''.join(new_parts)
+        elif any(line.strip().startswith(('def ', 'class ', 'import ', '#include')) for line in text.splitlines()):
+            return f"<pre>{text.strip()}</pre>"
+        return text.strip()
+
+    formatted_reply = format_reply(reply)
+
+    user_data = load_user_data(uid)
+    user_data['history'].append({"q": question, "a": reply})
+    save_user_data(uid, user_data)
+
+    reply_text = f"<b>📨 Câu hỏi:</b> <i>{question}</i>\n\n<b>🤖 Zproject X Duong Cong Bằng:</b>\n"
+
+    MAX_LENGTH = 4000
+    if len(reply_text + formatted_reply) > MAX_LENGTH:
+        filename = f"zprojectxdcb_{random.randint(1000, 9999)}.txt"
+        buffer = io.StringIO()
+        buffer.write(f"Câu hỏi: {question}\n\nTrả lời:\n{reply}\n")
+        buffer.seek(0)
+        await update.message.reply_document(
+            document=InputFile(buffer, filename=filename),
+            caption=f"📁 Vì câu trả lời quá dài nên gửi file nhé @{username}",
+            reply_to_message_id=update.message.message_id
+        )
+    else:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔁 Trả lời lại", callback_data=f"retry|{uid}|{question}")]
+        ])
+        await msg.edit_text(
+            reply_text + formatted_reply,
+            parse_mode='HTML',
+            reply_markup=keyboard
+        )
+
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data.split("|")
+    if len(data) < 3:
         return
-    mail = mails[0]
-    await update.message.reply_html(
-        f"📥 <b>Thư mới:</b>\n👤 Từ: <code>{mail['from']}</code>\n📝 Tiêu đề: <b>{mail['subject']}</b>\n🕒 Thời gian: {mail['datetime2']}\n\n{get_random_image_html()}",
-        reply_to_message_id=update.message.message_id,
-        reply_markup=admin_keyboard
+    action, uid, question = data
+
+    if str(query.from_user.id) != uid:
+        return await query.message.reply_text("⚠️ Bạn không được phép tương tác với câu hỏi của người khác")
+
+    update.message = query.message
+    context.args = question.split()
+    await ask_command(update, context)
+
+async def export_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = str(update.effective_user.id)
+    data = load_user_data(uid)
+    if not data['history']:
+        return await update.message.reply_text("❗ Bạn chưa có dữ liệu để xuất")
+
+    buffer = io.StringIO()
+    buffer.write(f"LỊCH SỬ HỎI ĐÁP - {update.effective_user.full_name}\n\n")
+    for i, qa in enumerate(data['history'], 1):
+        buffer.write(f"{i}. Q: {qa['q']}\nA: {qa['a']}\n{'-'*40}\n")
+    buffer.seek(0)
+
+    await update.message.reply_document(document=InputFile(buffer, filename="history.txt"), caption="📁 Lịch sử hỏi")
+
+async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = str(update.effective_user.id)
+    data = load_user_data(uid)
+    if not data['history']:
+        return await update.message.reply_text("📭 Bạn chưa hỏi gì cả hôm nay")
+
+    text = "🕘 <b>Lịch sử câu hỏi gần đây:</b>\n"
+    for i, qa in enumerate(data['history'][-5:], 1):
+        text += f"{i}. <i>{qa['q'][:50]}</i>\n"
+    await update.message.reply_text(text, parse_mode='HTML')
+
+async def img_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    cid = update.effective_chat.id
+    all_users = load_all_users()
+    if cid not in all_users:
+        all_users.append(cid)
+        save_all_users(all_users)
+
+    prompt = ' '.join(context.args)
+    if not prompt:
+        return await update.message.reply_text("📷 Dùng: /img mô_tả_ảnh")
+
+    await update.message.reply_text("🖼️ Đang tạo ảnh...", reply_to_message_id=update.message.message_id)
+    url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(prompt)}"
+    await update.message.reply_photo(photo=url, caption=f"📸 Prompt: <b>{prompt}</b>", parse_mode='HTML')
+
+async def auto_send_fun_messages():
+    fallback = [
+        "🌞 Chào bạn! Hôm nay bạn đã cười chưa?",
+        "💬 Nếu bạn đang buồn, hãy hỏi tôi một câu nhé!",
+        "🎉 Mỗi ngày là một cơ hội, bạn tuyệt vời lắm!",
+        "🌈 Luôn luôn có lý do để mỉm cười!"
+    ]
+
+    while True:
+        await asyncio.sleep(random.randint(10800, 18000))  # 3 - 5 tiếng
+        prompt = None
+        try:
+            with open("prompt-1709.txt", "r", encoding="utf-8") as f:
+                lines = [line.strip() for line in f if line.strip()]
+            if lines:
+                prompt = random.choice(lines)
+        except:
+            prompt = None
+
+        if prompt:
+            headers = {
+                "Authorization": f"Bearer {API_KEY}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": "grok-3-latest",
+                "stream": False,
+                "temperature": 0.7,
+                "messages": [
+                    {"role": "system", "content": "Bạn là Zproject X Duong Cong Bang, AI thân thiện và vui nhộn."},
+                    {"role": "user", "content": prompt}
+                ]
+            }
+            try:
+                res = requests.post("https://api.x.ai/v1/chat/completions", headers=headers, json=payload, timeout=10)
+                message = res.json()['choices'][0]['message']['content']
+            except:
+                message = random.choice(fallback)
+        else:
+            message = random.choice(fallback)
+
+        for uid in load_all_users():
+            try:
+                await app_bot.bot.send_message(chat_id=uid, text=message)
+            except Exception as e:
+                print(f"❗ Không gửi được tới {uid}: {e}")
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    cid = update.effective_chat.id
+    users = load_all_users()
+    if cid not in users:
+        users.append(cid)
+        save_all_users(users)
+    await update.message.reply_text(
+        "🤖 Bot by Zproject X Duong Cong Bang\n"
+        "👉 Admin: @zproject2\n"
+        "👉 Group: @zproject4"
     )
 
-async def read(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    res = requests.get(API).json()
-    mails = res.get("mail_list", [])
-    if not mails:
-        await update.message.reply_text("📭 Không có thư nào để đọc.", reply_to_message_id=update.message.message_id, reply_markup=admin_keyboard)
-        return
-    mail_id = mails[0]['mail_id']
-    key = res['mail_get_key']
-    detail = requests.get(f"https://10minutemail.net/mail.api.php?mailid={mail_id}&k={key}").json()
-    body = detail.get("mail_body", "[Không có nội dung]")
-    await update.message.reply_html(f"📖 <b>Nội dung thư:</b>\n{body}\n\n{get_random_image_html()}", reply_to_message_id=update.message.message_id, reply_markup=admin_keyboard)
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "💡 Hướng dẫn sử dụng Bot Zproject:\n"
+        "━━━━━━━━━━━━━━━━\n"
+        "• /ask <câu hỏi> – Hỏi AI Zproject\n"
+        "• /img <mô tả ảnh> – Tạo ảnh AI\n"
+        "• /export – Xuất lịch sử hỏi đáp\n"
+        "• /history – Xem câu hỏi gần đây\n"
+        "━━━━━━━━━━━━━━━━\n"
+        "🔄 Zproject X Duong Cong Bang DepZai Hog:v \n"
+        "✨ AI bởi Zproject X Dương Công Bằng"
+    )
 
-# Khởi chạy bot
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("new", new))
-    app.add_handler(CommandHandler("get", get))
-    app.add_handler(CommandHandler("check", check))
-    app.add_handler(CommandHandler("read", read))
-    app.add_handler(CommandHandler("time", time))
-    print("🤖 Bot Telegram đang chạy...")
-    app.run_polling()
+if __name__ == '__main__':
+    app_bot = ApplicationBuilder().token(TOKEN).build()
+
+    app_bot.add_handler(CommandHandler("start", start_command))
+    app_bot.add_handler(CommandHandler("help", help_command))
+    app_bot.add_handler(CommandHandler("ask", ask_command))
+    app_bot.add_handler(CommandHandler("export", export_command))
+    app_bot.add_handler(CommandHandler("history", history_command))
+    app_bot.add_handler(CommandHandler("img", img_command))
+    app_bot.add_handler(CallbackQueryHandler(handle_callback))
+
+    asyncio.get_event_loop().create_task(auto_reset())
+    asyncio.get_event_loop().create_task(auto_send_fun_messages())
+
+    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=PORT)).start()
+    app_bot.run_polling()
