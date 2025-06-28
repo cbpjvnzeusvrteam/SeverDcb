@@ -4,6 +4,7 @@ from flask import Flask
 import os, json, io, requests, threading, time, re, uuid, random
 from datetime import datetime, timedelta
 from urllib.parse import quote
+import html
 
 # --- Cấu hình ---
 TOKEN = "7053031372:AAGGOnE72JbZat9IaXFqa-WRdv240vSYjms"
@@ -52,10 +53,10 @@ def format_reply_with_code(reply_text):
 
     for part in parts:
         if part.startswith("```") and part.endswith("```"):
-            code_content = part.strip("```").strip()
-            formatted_parts.append(f"<pre><code>{telebot.util.escape(code_content)}</code></pre>")
+            code_content = html.escape(part.strip("```").strip())
+            formatted_parts.append(f"<pre><code>{code_content}</code></pre>")
         else:
-            formatted_parts.append(part)
+            formatted_parts.append(html.escape(part))
 
     return "\n".join(formatted_parts)
 
@@ -72,8 +73,8 @@ def start(message):
 
     bot.reply_to(message,
         "🤖 Bot Zproject X Dương Công Bằng\n"
-        "• /ask <câu hỏi>\n"
-        "• /img <mô tả ảnh>\n"
+        "• /ask &lt;câu hỏi&gt;\n"
+        "• /img &lt;mô tả ảnh&gt;\n"
         "• /history – Lịch sử hỏi\n"
         "• /export – Xuất file lịch sử\n"
         "• /help – Trợ giúp"
@@ -83,8 +84,8 @@ def start(message):
 def help_command(message):
     bot.reply_to(message,
         "💡 Lệnh hỗ trợ:\n"
-        "• /ask <câu hỏi> – Hỏi AI\n"
-        "• /img <mô tả> – Tạo ảnh AI\n"
+        "• /ask &lt;câu hỏi&gt; – Hỏi AI\n"
+        "• /img &lt;mô tả&gt; – Tạo ảnh AI\n"
         "• /history – Xem câu hỏi gần đây\n"
         "• /export – Tải lịch sử hỏi đáp"
     )
@@ -144,7 +145,7 @@ def ask_command(message):
         formatted_reply = format_reply_with_code(reply)
         try:
             bot.edit_message_text(
-                f"<b>📨 Câu hỏi:</b> <i>{telebot.util.escape(question)}</i>\n\n<b>🤖 Trả lời:</b>\n{formatted_reply}",
+                f"<b>📨 Câu hỏi:</b> <i>{html.escape(question)}</i>\n\n<b>🤖 Trả lời:</b>\n{formatted_reply}",
                 message.chat.id,
                 msg.message_id,
                 reply_to_message_id=message.message_id
@@ -178,7 +179,7 @@ def history_command(message):
 
     text = "📚 <b>Lịch sử câu hỏi gần đây:</b>\n"
     for i, qa in enumerate(data["history"][-5:], 1):
-        text += f"{i}. <i>{qa['q'][:50]}{'...' if len(qa['q']) > 50 else ''}</i>\n"
+        text += f"{i}. <i>{html.escape(qa['q'][:50])}{'...' if len(qa['q']) > 50 else ''}</i>\n"
     bot.send_message(message.chat.id, text)
 
 @bot.message_handler(commands=['export'])
